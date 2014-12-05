@@ -1,0 +1,10 @@
+{
+	"name": "ludumdare31",
+	"description": "Ludum Dare 31 Entry",
+	"libs": ["dl"],
+	"targetType": "executable",
+	"authors": ["Brian Schott"],
+	"dependencies": {
+		"derelict-sdl2": "==1.2.8"
+	}
+}
