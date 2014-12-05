@@ -4,6 +4,8 @@
 	"libs": ["dl"],
 	"targetType": "executable",
 	"authors": ["Brian Schott"],
+	"importPaths": ["containers/src"],
+	"sourcePaths": ["src", "containers/src"],
 	"dependencies": {
 		"derelict-sdl2": "==1.2.8"
 	}
