@@ -5,21 +5,6 @@ import entity;
 import statemachine;
 import map;
 
-enum MovementState
-{
-	running,
-	standing,
-	jumping
-}
-
-enum MovementTransition
-{
-	start,
-	stop,
-	jump,
-	land
-}
-
 enum PlayerKeys
 {
 	left,
@@ -30,64 +15,120 @@ enum PlayerKeys
 	attack
 }
 
+enum AttackDirection
+{
+	up,
+	upRight,
+	right,
+	downRight,
+	down,
+	downLeft,
+	left,
+	upLeft
+}
+
 class Player : Entity
 {
 
-	this(Universe* universe)
+	this(SDL_Texture* texture, Universe* universe)
 	{
-		this.universe = universe;
-		collisionBox.x = -16;
-		collisionBox.y = -32;
-		collisionBox.w = 32;
-		collisionBox.h = 64;
-		xVel = 0;
-		yVel = 0;
+		this.texture = texture;
+
+		component.universe = universe;
+		component.collisionBox.x = -16;
+		component.collisionBox.y = -32;
+		component.collisionBox.w = 32;
+		component.collisionBox.h = 64;
+
+		component.hitBoxes[AttackDirection.right].w = 32;
+		component.hitBoxes[AttackDirection.right].h = 32;
+		component.hitBoxes[AttackDirection.right].x = 32;
+		component.hitBoxes[AttackDirection.right].y = 16;
+
+		component.hitBoxes[AttackDirection.left].w = 32;
+		component.hitBoxes[AttackDirection.left].h = 32;
+		component.hitBoxes[AttackDirection.left].x = -32;
+		component.hitBoxes[AttackDirection.left].y = 16;
+
+		component.hurtBoxes[0].w = 20;
+		component.hurtBoxes[0].h = 60;
+		component.hurtBoxes[0].x = 0;
+		component.hurtBoxes[0].y = 4;
+
+		component.hurtMask = 1;
+
+		component.xVel = 0;
+		component.yVel = 0;
+
+		component.health = 200;
 	}
 
 	override void update()
 	{
 		import std.algorithm : max, min;
 		import std.math : abs;
-		yVel += universe.gravity;
+
+		if (component.screenKill())
+		{
+			dead = true;
+			return;
+		}
+
+		component.yVel += component.universe.gravity;
 
 		if (keyStates[PlayerKeys.left])
 		{
 			movementState.transition(MovementTransition.start);
-			xVel -= movementState == MovementState.jumping ? 0.5 : 0.75;
+			component.xVel -= movementState == MovementState.jumping ? 0.5 : 0.75;
+			component.facing = Facing.left;
 		}
 		else if (keyStates[PlayerKeys.right])
 		{
 			movementState.transition(MovementTransition.start);
-			xVel += movementState == MovementState.jumping ? 0.5 : 0.75;
+			component.xVel += movementState == MovementState.jumping ? 0.5 : 0.75;
+			component.facing = Facing.right;
 		}
 		else
 		{
-			if (abs(xVel) >= 2)
-				xVel *= 0.75;
+			if (abs(component.xVel) >= 2)
+				component.xVel *= 0.75;
 			else
 			{
-				xVel = 0;
+				component.xVel = 0;
 				movementState.transition(MovementTransition.stop);
 			}
 		}
 
 		if (keyStates[PlayerKeys.jump] && movementState != MovementState.jumping)
 		{
-			yVel = -15;
+			component.yVel = -15;
 			movementState.transition(MovementTransition.jump);
 		}
 
-		yVel = min(max(-15, yVel), 15);
-		xVel = min(max(-10, xVel), 10);
-		collisionBox.y += yVel;
-		collisionBox.x += xVel;
+		component.yVel = min(max(-15, component.yVel), 15);
+		component.xVel = min(max(-10, component.xVel), 10);
+		component.collisionBox.y += component.yVel;
+		component.collisionBox.x += component.xVel;
 
-		checkCollision(collisionBox, universe.map, xVel, yVel);
-		if (movementState == MovementState.jumping && yVel == 0)
+		checkCollision(component.collisionBox, component.universe.map, component.xVel, component.yVel);
+		if (movementState == MovementState.jumping && component.yVel == 0)
 		{
 			movementState.transition(MovementTransition.land);
-			if (xVel != 0)
+			if (component.xVel != 0)
 				movementState.transition(MovementTransition.start);
+		}
+
+		handleAttack();
+
+		component.handleInjury();
+		if (component.health == 0)
+		{
+			if (!dead)
+			{
+				import std.stdio : writeln;
+				writeln("Player died");
+				dead = true;
+			}
 		}
 	}
 
@@ -131,31 +172,74 @@ class Player : Entity
 
 	override void draw(SDL_Renderer* renderer)
 	{
-		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-		// Collision box in blue
-		SDL_SetRenderDrawColor(renderer, 0, 0, 255, 128);
-		SDL_RenderFillRect(renderer, &collisionBox);
-
-		// Hurt boxes in green
-		SDL_SetRenderDrawColor(renderer, 0, 255, 0, 128);
-		foreach (i, ref box; hurtBoxes)
+		int frameX;
+		int frameY;
+		if (component.facing == Facing.left)
 		{
-			if (1 << i & hurtActive)
-				SDL_RenderFillRect(renderer, &box);
+			frameY = 0;
+		}
+		else
+		{
+			frameY = 1;
 		}
 
-		// Hit boxes in red
-		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 128);
-		foreach (i, ref box; hitBoxes)
+		SDL_Rect src;
+		SDL_Rect dst;
+
+		src.h = 64;
+		src.y = 64 * frameY;
+
+		dst.h = 64;
+		dst.y = component.collisionBox.y;
+
+		if (component.hitMask == 0 || component.hitLag <= 4)
 		{
-			if (1 << i & hitActive)
-				SDL_RenderFillRect(renderer, &box);
+			src.x = 64 * frameX;
+			src.w = 64;
+			dst.w = 64;
+			dst.x = component.collisionBox.x - 16;
+		}
+		else
+		{
+			src.x = 128;
+			src.w = 128;
+			dst.w = 128;
+			dst.x = component.collisionBox.x - 16 - 32;
+		}
+
+		SDL_RenderCopy(renderer, texture, &src, &dst);
+
+//		component.draw(renderer);
+	}
+
+	void handleAttack()
+	{
+		if (component.hitLag > 0)
+			component.hitLag--;
+		else
+		{
+			if (keyStates[PlayerKeys.attack])
+			{
+				component.hitLag = 10;
+				// 7 0 1
+				// 6   2
+				// 5 4 3
+				component.hitMask = 1 << (component.facing == Facing.left ? 6 : 2);
+			}
+			else
+				component.hitMask = 0;
 		}
 	}
 
-	SDL_Rect collisionBox;
 
-private:
+
+	override int checkHitBoxes(ref const SDL_Rect[8] hurtBoxes, ubyte mask)
+	{
+		return component.checkHitBoxes(hurtBoxes, mask);
+	}
+
+	CombatComponent component;
+
 	alias PlayerStateMachine = StateMachine!(MovementState, MovementTransition,
 		MovementTransition.jump, MovementState.running, MovementState.jumping,
 		MovementTransition.jump, MovementState.standing, MovementState.jumping,
@@ -166,13 +250,6 @@ private:
 		MovementTransition.stop, MovementState.jumping, MovementState.jumping,
 		MovementTransition.land, MovementState.jumping, MovementState.standing);
 	PlayerStateMachine movementState = PlayerStateMachine(MovementState.standing);
-	float xVel;
-	float yVel;
-
-	SDL_Rect[8] hitBoxes;
-	SDL_Rect[8] hurtBoxes;
 	bool[PlayerKeys.max + 1] keyStates;
-	ubyte hitActive;
-	ubyte hurtActive;
-	Universe* universe;
+	SDL_Texture* texture;
 }

@@ -11,13 +11,16 @@ import particles;
 import background;
 import map;
 import player;
+import snowman;
+import healthgage;
+import timer;
 
 void main()
 {
     DerelictSDL2.load();
     DerelictSDL2Image.load();
     DerelictSDL2Mixer.load();
-    DerelictSDL2ttf.load();
+//    DerelictSDL2ttf.load();
 
 	SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
 	scope (exit) SDL_Quit();
@@ -41,22 +44,43 @@ void main()
 	universe.addEntity(map);
 	universe.map = map;
 
-	Player player = new Player(&universe);
-	universe.addEntity(player);
-	player.collisionBox.x = 100;
-	player.collisionBox.y = 300;
+	SDL_Texture* snowmanTexture = loadTexture(renderer, "images/snowman.png");
+	scope (exit) SDL_DestroyTexture(snowmanTexture);
+	SnowmanSpawner spawner = new SnowmanSpawner(snowmanTexture, &universe);
+	universe.addEntity(spawner);
 
-	gameLoop(universe, renderer);
+	SDL_Texture* playerTexture = loadTexture(renderer, "images/player.png");
+	scope (exit) SDL_DestroyTexture(playerTexture);
+	Player player = new Player(playerTexture, &universe);
+	universe.addEntity(player);
+	player.component.collisionBox.x = 100;
+	player.component.collisionBox.y = 300;
+
+	HealthGage gage = new HealthGage(player);
+	universe.addEntity(gage);
+
+	SDL_Texture* timerTexture = loadTexture(renderer, "images/numbers.png");
+	scope (exit) SDL_DestroyTexture(timerTexture);
+	Timer timer = new Timer(timerTexture);
+	universe.addEntity(timer);
+
+	gameLoop(universe, renderer, player);
 }
 
-void gameLoop(ref Universe universe, SDL_Renderer* renderer)
+void gameLoop(ref Universe universe, SDL_Renderer* renderer, Player player)
 {
 	enum frameRate = 16;
 	bool running = true;
 	while (running)
 	{
 		running = handleInput(universe);
+		if (!running)
+			break;
 		universe.update();
+
+		if (player.dead)
+			break;
+
 		SDL_Delay(frameRate);
 		handleGraphics(universe, renderer);
 	}
@@ -73,6 +97,10 @@ bool handleInput(ref Universe universe)
 		writeln("Quitting");
 		retVal = false;
 		break;
+	case SDL_KEYDOWN:
+		if (event.key.keysym.sym == SDLK_ESCAPE)
+			retVal = false;
+		goto default;
 	default:
 		universe.handleInput(&event);
 		break;
