@@ -6,8 +6,9 @@ import std.stdio;
 import std.json;
 import std.algorithm;
 import std.string;
-import derelict.sdl2.image;
 import derelict.sdl2.sdl;
+import entity;
+import textures;
 
 immutable int TILE_SIZE = 32;
 immutable int COLLISION_DEBUG_WIDTH = 8;
@@ -27,15 +28,15 @@ private struct Layer
 {
 public:
 
-	void draw(SDL_Renderer* renderer, ref const SDL_Rect cameraRect, SDL_Texture*[] textures)
+	void draw(SDL_Renderer* renderer, SDL_Texture*[] textures)
 	{
 		// TODO: Fix this
-		int beginX = max(min(cameraRect.x / TILE_SIZE - 1, tiles.length), 0);
-		int endX = max(min(beginX + (cameraRect.w / TILE_SIZE + 2), tiles.length), 0);
+		int beginX = 0;
+		int endX = cast (int) tiles.length;
 
 
-		int beginY = max(min(cameraRect.y / TILE_SIZE - 1, tiles[0].length), 0);
-		int endY = max(min(beginY + (cameraRect.h / TILE_SIZE + 3), tiles[0].length), 0);
+		int beginY = 0;
+		int endY = cast (int) tiles[0].length;
 
 		SDL_Rect srcRect;
 		srcRect.w = TILE_SIZE;
@@ -54,8 +55,8 @@ public:
 
 				srcRect.x = location.x * TILE_SIZE;
 				srcRect.y = location.y * TILE_SIZE;
-				dstRect.x = (i * TILE_SIZE) - cameraRect.x;
-				dstRect.y = (j * TILE_SIZE) - cameraRect.y;
+				dstRect.x = (i * TILE_SIZE);
+				dstRect.y = (j * TILE_SIZE);
 				SDL_RenderCopy(renderer, textures[location.index], &srcRect,
 					&dstRect);
 			}
@@ -66,7 +67,7 @@ public:
 
 }
 
-struct TileMap
+class TileMap : Entity
 {
 public:
 	this(int width, int height)
@@ -78,15 +79,13 @@ public:
 			row = new byte[](width);
 	}
 
-	void draw(SDL_Renderer* renderer, ref const SDL_Rect cameraRect, bool debugging = false)
+	override void draw(SDL_Renderer* renderer)
 	{
 		foreach (Layer layer; layers)
 		{
-			layer.draw(renderer, cameraRect, textures);
+			layer.draw(renderer, textures);
 		}
-
-		if (debugging)
-			drawCollisionInfo(cameraRect, renderer, blockInfo);
+//		drawCollisionInfo(renderer, blockInfo);
 	}
 
 	@property int width() {return this.width;}
@@ -111,7 +110,7 @@ public:
 
 }
 
-TileMap* loadTileMap(string fileName, SDL_Renderer* renderer)
+TileMap loadTileMap(string fileName, SDL_Renderer* renderer)
 in
 {
 	assert(renderer);
@@ -128,7 +127,7 @@ body
 
 	int width = cast(int) tileMap.object["width"].integer;
 	int height = cast(int) tileMap.object["height"].integer;
-	TileMap* map = new TileMap(width, height);
+	TileMap map = new TileMap(width, height);
 	JSONValue layers = tileMap.object["layers"];
 	map.blockInfo.length = width;
 	foreach (ref blockColumn; map.blockInfo)
@@ -164,15 +163,7 @@ body
 	{
 		int index = cast(int) image.object["index"].integer;
 		string imageFileName = image.object["fileName"].str;
-
-		SDL_Surface* surf = IMG_Load(toStringz(imageFileName));
-		if (surf is null)
-		{
-			writeln("Could not load ", imageFileName);
-			continue;
-		}
-		SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-		SDL_FreeSurface(surf);
+		SDL_Texture* tex = loadTexture(renderer, imageFileName);
 		if (index >= map.textures.length)
 			map.textures.length = index + 1;
 		map.textures[index] = tex;
@@ -190,7 +181,7 @@ body
 /**
  * For debugging
  */
-void drawCollisionInfo(ref const SDL_Rect cameraRect, SDL_Renderer* renderer, byte[][] blockInfo)
+void drawCollisionInfo(SDL_Renderer* renderer, byte[][] blockInfo)
 {
 	foreach(int i, column; blockInfo)
 	{
@@ -199,8 +190,8 @@ void drawCollisionInfo(ref const SDL_Rect cameraRect, SDL_Renderer* renderer, by
 			if (block & BLOCK_TOP)
 			{
 				SDL_Rect rect;
-				rect.x = i * TILE_SIZE - cameraRect.x;
-				rect.y = j * TILE_SIZE - cameraRect.y;
+				rect.x = i * TILE_SIZE;
+				rect.y = j * TILE_SIZE;
 				rect.w = TILE_SIZE;
 				rect.h = COLLISION_DEBUG_WIDTH;
 				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 128);
@@ -210,8 +201,8 @@ void drawCollisionInfo(ref const SDL_Rect cameraRect, SDL_Renderer* renderer, by
 			if (block & BLOCK_RIGHT)
 			{
 				SDL_Rect rect;
-				rect.x = ((i + 1) * TILE_SIZE) - cameraRect.x - COLLISION_DEBUG_WIDTH;
-				rect.y = j * TILE_SIZE - cameraRect.y;
+				rect.x = ((i + 1) * TILE_SIZE) - COLLISION_DEBUG_WIDTH;
+				rect.y = j * TILE_SIZE;
 				rect.w = COLLISION_DEBUG_WIDTH;
 				rect.h = TILE_SIZE;
 				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 128);
@@ -221,8 +212,8 @@ void drawCollisionInfo(ref const SDL_Rect cameraRect, SDL_Renderer* renderer, by
 			if (block & BLOCK_BOTTOM)
 			{
 				SDL_Rect rect;
-				rect.x = (i * TILE_SIZE) - cameraRect.x;
-				rect.y = ((j + 1) * TILE_SIZE) - cameraRect.y - COLLISION_DEBUG_WIDTH;
+				rect.x = (i * TILE_SIZE);
+				rect.y = ((j + 1) * TILE_SIZE) - COLLISION_DEBUG_WIDTH;
 				rect.w = TILE_SIZE;
 				rect.h = COLLISION_DEBUG_WIDTH;
 				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 128);
@@ -232,8 +223,8 @@ void drawCollisionInfo(ref const SDL_Rect cameraRect, SDL_Renderer* renderer, by
 			if (block & BLOCK_LEFT)
 			{
 				SDL_Rect rect;
-				rect.x = i * TILE_SIZE - cameraRect.x;
-				rect.y = j * TILE_SIZE - cameraRect.y;
+				rect.x = i * TILE_SIZE;
+				rect.y = j * TILE_SIZE;
 				rect.w = COLLISION_DEBUG_WIDTH;
 				rect.h = TILE_SIZE;
 				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 0);
@@ -251,13 +242,13 @@ struct CollisionDisplacement
 }
 
 
-void checkCollision(ref SDL_Rect objectPosition, const TileMap* map,
+void checkCollision(ref SDL_Rect objectPosition, const TileMap map,
 	ref float xVel, ref float yVel)
 in
 {
 	assert (map !is null);
-	assert (xVel < TILE_SIZE / 4 && xVel > -(TILE_SIZE / 4));
-	assert (yVel < TILE_SIZE / 4 && yVel > -(TILE_SIZE / 4));
+//	assert (xVel < TILE_SIZE / 4 && xVel > -(TILE_SIZE / 4));
+//	assert (yVel < TILE_SIZE / 4 && yVel > -(TILE_SIZE / 4));
 }
 body
 {
@@ -292,7 +283,7 @@ body
 				}
 		foreach (ref rect; collisionRects)
 		{
-			if (!rectanglesOverlap(rect, objectPosition))
+			if (!SDL_HasIntersection(&rect, &objectPosition))
 				continue;
 			CollisionDisplacement disp;
 			disp.displacement = sign > 0 ? rect.x - (objectPosition.x + objectPosition.w)
@@ -330,7 +321,7 @@ body
 				}
 		foreach (ref rect; collisionRects)
 		{
-			if (!rectanglesOverlap(rect, objectPosition))
+			if (!SDL_HasIntersection(&rect, &objectPosition))
 				continue;
 			CollisionDisplacement disp;
 			disp.displacement = sign > 0 ? rect.y - (objectPosition.y + objectPosition.h)
@@ -344,7 +335,7 @@ body
 	sort!("abs(a.displacement) < abs(b.displacement)")(displacements);
 	foreach (ref CollisionDisplacement disp; displacements)
 	{
-		if (!rectanglesOverlap(disp.rect, objectPosition))
+		if (!SDL_HasIntersection(&disp.rect, &objectPosition))
 			continue;
 		if (disp.vertical)
 		{

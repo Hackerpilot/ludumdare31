@@ -1,9 +1,15 @@
 module entity;
 
 import derelict.sdl2.sdl;
+import map;
 
 struct Universe
 {
+	this(float g)
+	{
+		this._gravity = g;
+	}
+
 	Entity addEntity(Entity entity)
 	{
 		entities.insert(entity);
@@ -33,7 +39,13 @@ struct Universe
 			entity.handleInput(event);
 	}
 
+	float gravity() const @property { return _gravity; }
+
+	TileMap map;
+
 private:
+
+	float _gravity;
 
 	import containers.unrolledlist : UnrolledList;
 

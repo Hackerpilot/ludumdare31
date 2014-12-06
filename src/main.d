@@ -9,6 +9,8 @@ import textures;
 import entity;
 import particles;
 import background;
+import map;
+import player;
 
 void main()
 {
@@ -25,15 +27,24 @@ void main()
 	SDL_Renderer* renderer;
 	SDL_Window* window;
 
-	SDL_CreateWindowAndRenderer(640, 480, 0, &window, &renderer);
+	SDL_CreateWindowAndRenderer(800, 600, 0, &window, &renderer);
 
-	Universe universe;
+	Universe universe = Universe(0.75);
 
 	SDL_Texture* texture = loadTexture(renderer, "images/background.png");
 	scope (exit) SDL_DestroyTexture(texture);
 
 	universe.addEntity(new Background(texture));
 	createSnow(universe, renderer);
+
+	TileMap map = loadTileMap("maps/map1.json", renderer);
+	universe.addEntity(map);
+	universe.map = map;
+
+	Player player = new Player(&universe);
+	universe.addEntity(player);
+	player.collisionBox.x = 100;
+	player.collisionBox.y = 300;
 
 	gameLoop(universe, renderer);
 }
